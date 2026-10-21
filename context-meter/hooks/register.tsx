@@ -2,7 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Reading } from '../types'
-import { AROUND, barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, roomOf, thresholdsFor, widthOf } from './meter'
+import {
+  AROUND, SEPARATOR, barRuns, detailFor, filledCells, formatTokens, holdsPlugin, isBlank, levelFor, markerCell, roomOf, thresholdsFor, treeWidth, widthOf
+} from './meter'
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
 const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, null as number | null)
@@ -162,13 +164,21 @@ export const register: Register = (on, options) => {
     const point = await read($, compactAt)
     const beneath = await next(e)
     const { Box, Text } = $.ui.resolve(e)
-    const room = roomOf(e.surface, e.viewport?.columns, hintWidth) - AROUND
+
+    // What is beneath is drawn after the meter, and the row has only so much room for both.
+    const hasModes = e.props.modes.length > 0
+    const hasBeneath = hasModes || !isBlank(beneath)
+    const below = (hasModes ? widthOf(e.props.modes.join(' & ')) : 0) + treeWidth(beneath)
+    const room =
+      roomOf(e.surface, e.viewport?.columns, hintWidth) - (hasBeneath ? below + SEPARATOR.length : 0) - (holdsPlugin(beneath) ? 0 : AROUND)
+    const separator = hasBeneath ? <Text dimColor>{SEPARATOR}</Text> : null
 
     if (current === null || current.tokens === null) {
       if (room < DASH) return beneath
       return (
         <Box flexDirection="row">
           <Text dimColor>ctx –</Text>
+          {separator}
           {beneath}
         </Box>
       )
@@ -193,6 +203,7 @@ export const register: Register = (on, options) => {
             })
           : null}
         <Text>{` ${words.tokens}${detail.hasWindow ? '/' + words.window : ''}${detail.hasPercent ? ' ' + words.percent : ''}`}</Text>
+        {separator}
         {beneath}
       </Box>
     )

@@ -41,13 +41,13 @@ function world (on: On, start: Partial<Fake> = {}) {
     const breakdown = { autoCompactThreshold: fake.autoCompactThreshold, isAutoCompactEnabled: fake.autoCompactThreshold !== undefined }
     return { value: { startedAt: NOW, rateLimits: [], context: { window: fake.window, tokens: fake.tokens, breakdown } } as never }
   })
-  // The engine's own node, as core answers it; with mode labels, a Box the tests find.
+  // The engine's own node, as core answers it: the mode labels, which it draws itself.
   on('ui.render', ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Text } = $.ui.resolve(e)
     draws.count += 1
     if (e.component === 'PromptHint') return <Text>{e.props.hint}</Text>
     if (e.component !== 'SessionMode') return <Text>engine</Text>
-    return e.props.modes.length > 0 ? <Box key="engine" /> : ({ type: 'engine', ref: 0 } as const)
+    return { type: 'engine', ref: 0 } as const
   })
   return { clock, fake, queries, draws, toasts }
 }
@@ -439,6 +439,94 @@ test('the hint is left as the engine draws it', async ($, on) => {
   world(on, { tokens: 142_000 })
   await startSession($)
   expect(await texts(await hint($, '? for shortcuts'))).toEqual(['? for shortcuts'])
+})
+
+test("keeps the engine's mode labels after the meter, once and last", async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  const ui = await footer($, ['focus'])
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%', ' · '])
+  expect((await ui.findAll({ type: 'engine' })).length).toBe(1)
+  expect((await ui.findAll({})).at(-1)?.type).toBe('engine')
+})
+
+test('alone, with no mode labels, the meter ends the footer without a separator', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect((await texts(await footer($))).at(-1)).toBe(' 142k/1M 14%')
+})
+
+test('the mode labels take their room from the meter', async ($, on) => {
+  // `focus` is 5 columns, and 3 more for the separator.
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await footer($, ['focus'], 64))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%', ' · '])
+  expect(await texts(await footer($, ['focus'], 63))).toEqual(['ctx', ' 142k/1M 14%', ' · '])
+})
+
+/** Another plugin's switch, drawn beneath the meter in place of the engine's own node: 13 columns. */
+const switchBeneath = {
+  name: 'switch',
+  tier: 'append' as const,
+  register (on: On) {
+    on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
+      await next(e)
+      const { Text } = $.ui.resolve(e)
+      return <Text>{'⏵ narrator on'}</Text>
+    })
+  }
+}
+
+test("another plugin's drawing beneath keeps its place after the meter and its room", { plugins: [switchBeneath] }, async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await footer($, [], 68))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%', ' · ', '⏵ narrator on'])
+  expect(await texts(await footer($, [], 67))).toEqual(['ctx', ' 142k/1M 14%', ' · ', '⏵ narrator on'])
+  expect(await texts(await footer($, [], 54))).toEqual(['ctx', ' 142k 14%', ' · ', '⏵ narrator on'])
+  expect(await texts(await footer($, [], 50))).toEqual(['ctx', ' 142k', ' · ', '⏵ narrator on'])
+  expect(await texts(await footer($, [], 49))).toEqual(['⏵ narrator on'])
+})
+
+/** A plugin beneath that has nothing to show and passes the engine's drawing on. */
+const quietBeneath = {
+  name: 'quiet',
+  tier: 'append' as const,
+  register (on: On) {
+    on('ui.render', { component: 'SessionMode' }, ($, e, next) => next(e))
+  }
+}
+
+test('a plugin beneath that shows nothing costs the meter nothing', { plugins: [quietBeneath] }, async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await footer($))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+})
+
+/** A plugin above the meter, wrapping what is beneath it: it draws its own text first. */
+const usageAbove = {
+  name: 'usage',
+  tier: 'prepend' as const,
+  register (on: On) {
+    on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
+      const beneath = await next(e)
+      const { Box, Text } = $.ui.resolve(e)
+      return (
+        <Box flexDirection="row">
+          <Text>{'5h 58%'}</Text>
+          {beneath}
+        </Box>
+      )
+    })
+  }
+}
+
+test('wrapped by another plugin, the meter still draws and the engine\'s node is once and last', { plugins: [usageAbove] }, async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  const ui = await footer($, ['focus'])
+  expect(await texts(ui)).toEqual(['5h 58%', 'ctx', ' ━', '─────────', ' 142k/1M 14%', ' · '])
+  expect((await ui.findAll({ type: 'engine' })).length).toBe(1)
+  expect((await ui.findAll({})).at(-1)?.type).toBe('engine')
 })
 
 test('the dash gives way too, and last', async ($, on) => {

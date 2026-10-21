@@ -1,3 +1,5 @@
+import type { RenderNode } from 'claude-code'
+
 import type { Level } from '../types'
 
 /** Token counts at which the meter turns yellow and red. */
@@ -80,6 +82,31 @@ export const AROUND = 1 + SEPARATOR.length
 /** Columns a text takes on one row. */
 export function widthOf (text: string): number {
   return [...text.replace(/[︎️]/g, '')].length
+}
+
+/**
+ * Whether a drawing shows nothing: no text and no control. The engine's own node is no drawing of
+ * its own here, it stands for the mode labels, which are told apart by the footer's `modes`.
+ */
+export function isBlank (node: RenderNode | undefined): boolean {
+  if (node === undefined || node === null) return true
+  if (typeof node === 'string') return node.trim() === ''
+  if (node.type === 'engine') return true
+  if (node.type !== 'Box' && node.type !== 'Text') return false
+  return (node.children ?? []).every(isBlank)
+}
+
+/** Columns the text of a drawing takes on one row, not counting the engine's own node. */
+export function treeWidth (node: RenderNode | undefined): number {
+  if (node === undefined || node === null || (typeof node !== 'string' && node.type === 'engine')) return 0
+  if (typeof node === 'string') return widthOf(node)
+  return (node.children ?? []).reduce((sum, child) => sum + treeWidth(child), 0)
+}
+
+/** Whether a drawing holds another plugin's: the engine marks the root of each hook's tree with its plugin. */
+export function holdsPlugin (node: RenderNode | undefined): boolean {
+  if (node === undefined || node === null || typeof node === 'string' || node.type === 'engine') return false
+  return 'part' in node || (node.children ?? []).some(holdsPlugin)
 }
 
 /**
