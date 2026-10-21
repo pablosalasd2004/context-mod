@@ -48,9 +48,11 @@ From a shell:
 claude plugin install context-meter --marketplace pablosalasd2004/context-mod
 ```
 
-In the desktop app, where `/plugin` does not run: click **+** next to the prompt
-box, then **Plugins**, **Add marketplace** with `pablosalasd2004/context-mod`, then
-**Add plugin**.
+For the desktop app, run the shell command above once. It installs the plugin at
+user scope, and the desktop app's local sessions read the same settings as the
+terminal, so the plugin is there too. To manage it from the app, click **+** next
+to the prompt box and open the plugin browser (**Add plugins**, or **Plugins** then
+**Browse plugins**). Plugins are not available in WSL sessions of the desktop app.
 
 ### Install from a local copy
 
@@ -58,10 +60,13 @@ To run the plugin from a folder on your machine (for development), register the
 folder as a marketplace from its parent directory, then install from it:
 
 ```text
-cd C:\Users\<you>\Projects
-claude plugin marketplace add ./Context-Mod
+git clone https://github.com/pablosalasd2004/context-mod
+claude plugin marketplace add ./context-mod
 claude plugin install context-meter@context-mod
 ```
+
+Run these from the folder that holds the clone, and use the name of your own folder
+after `./` if it is not `context-mod`.
 
 `claude plugin marketplace add .` is rejected: the source must be `owner/repo`,
 a URL, or a path that starts with `./`. The marketplace then reads the plugin from
@@ -72,6 +77,7 @@ would run twice.
 ## Configure
 
 Set the options with `/plugin configure context-meter@context-mod` in a session.
+The plugin reads them when it loads, so restart Claude Code after changing one.
 
 | Option | Default | What it does |
 | --- | --- | --- |
@@ -86,6 +92,10 @@ at or below the yellow one sends both thresholds back to the defaults.
 
 ## Things to know
 
+- **Where it works.** The meter is drawn in the prompt footer of the terminal and of
+  the desktop app. The VS Code extension has no such footer, so only the toast shows
+  there, and plugins do not load in WSL sessions of the desktop app. The desktop app
+  carries its own copy of Claude Code: check its version with `/status`.
 - **Where the figures come from.** The meter reads the engine's own context figures
   (`$.session.usage()` and `session.measure`). It never counts tokens itself, so
   its numbers are the ones the engine reports.
@@ -111,7 +121,11 @@ at or below the yellow one sends both thresholds back to the defaults.
   label. That width is held in the module, so a reload starts it at zero until the
   hint is drawn again.
 - **Trust.** A mod is code that runs with your permissions and can read your files
-  and settings. Read the source before you install it.
+  and settings. Read the source before you install it. This one reads the engine's
+  context figures and the `enabledPlugins` setting, draws in the footer and raises
+  a toast; it starts no process and uses no network or file access.
+  `claude plugin validate ./context-meter` lists every call it makes on its `calls:`
+  line.
 
 `context-meter` is verified in a terminal session and through the test kit on the
 desktop surface. It has not been looked at in the desktop app.
@@ -136,13 +150,12 @@ with hot reload, from a terminal:
 claude --plugin-dir ./context-meter
 ```
 
-The development skills under `.claude/skills/` are third-party and not committed.
-`skills-lock.json` records them; restore them with:
-
-```text
-pnpm dlx skills add obra/superpowers --skill test-driven-development verification-before-completion systematic-debugging --agent claude-code --copy --yes
-```
+The maintainer's own notes (verification order, conventions and the third-party
+development skills) are in `CLAUDE.md`.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Parts of the footer measurement are adapted from
+[sub-meter](https://github.com/midudev/better-claude) (MIT, Miguel Ángel Durán);
+its notice is in [context-meter/LICENSE](context-meter/LICENSE), which also ships
+with the plugin.
