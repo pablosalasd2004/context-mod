@@ -115,6 +115,15 @@ test('when usage fails the meter shows the dash', async ($, on) => {
   expect(await (await footer($)).find({ type: 'Text', text: 'ctx –' })).toBeDefined()
 })
 
+test('a window that is not a positive size is no figure: the dash, and no toast', async ($, on) => {
+  const w = world(on, { tokens: 500, window: 0 })
+  await startSession($)
+  expect(await texts(await footer($))).toEqual(['ctx –'])
+  await measure($, 500, 0)
+  expect(await texts(await footer($))).toEqual(['ctx –'])
+  expect(w.toasts).toEqual([])
+})
+
 test('marks the cell where auto-compact will run, dim while the context is short of it', async ($, on) => {
   world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
   await startSession($)

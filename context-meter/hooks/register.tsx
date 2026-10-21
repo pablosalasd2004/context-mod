@@ -45,8 +45,10 @@ async function judge ($: EngineInterface, options: PluginOptions, tokens: number
 /**
  * Keeps a context figure from the engine for the footer. After a compaction the engine goes on
  * reporting the figure from before it, so that one is not kept; the first different figure is.
+ * A window that is not a positive size gives nothing to measure against, so it is no figure at all.
  */
 async function take ($: EngineInterface, options: PluginOptions, context: { tokens?: number; window: number }) {
+  if (!(context.window > 0)) return
   const old = await read($, stale)
   if (old !== null) {
     if (context.tokens === old) return
