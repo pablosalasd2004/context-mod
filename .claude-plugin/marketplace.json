@@ -1,0 +1,14 @@
+{
+  "name": "context-mod",
+  "description": "Mods for Claude Code that show how full the context window is.",
+  "owner": {
+    "name": "Pablo Salas"
+  },
+  "plugins": [
+    {
+      "name": "context-meter",
+      "source": "./context-meter",
+      "description": "Context-window usage in the prompt footer, next to the sub-meter bar: tokens used, a bar, and a color that says when to /compact."
+    }
+  ]
+}
