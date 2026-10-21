@@ -65,6 +65,24 @@ export function barRuns (filled: number, marker: number | null): BarRun[] {
   return runs
 }
 
+// The terminal footer's row: two columns of padding at each end, the permission mode label at the left
+// (20 columns for the longest) and at least two columns between that and what is drawn at the right.
+const FOOTER_PADDING = 4
+const FOOTER_GAP = 2
+const MODE_LABEL = 20
+
+/** Separates the meter from what is drawn after it. */
+export const SEPARATOR = ' · '
+
+// Kept free, when no other plugin is beneath, for one that may wrap the meter and draw after it.
+export const AROUND = 1 + SEPARATOR.length
+
+/** Columns the footer leaves at its right end: all of them off the terminal or where no width was measured. */
+export function roomOf (surface: string, columns: number | undefined): number {
+  if (surface !== 'terminal' || columns === undefined) return Infinity
+  return columns - FOOTER_PADDING - FOOTER_GAP - MODE_LABEL
+}
+
 /** What the meter still draws: the bar, the window beside the tokens, the percent. */
 export type Detail = { hasBar: boolean; hasWindow: boolean; hasPercent: boolean }
 

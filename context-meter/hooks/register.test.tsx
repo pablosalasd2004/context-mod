@@ -398,6 +398,35 @@ test('on a 200k window the toast comes at the same share of the window', async (
   expect(w.toasts.length).toBe(1)
 })
 
+// The footer's row on the terminal leaves the meter its columns minus 30: 4 of padding, 2 between, 20 for
+// the mode label at the left, and 4 for a plugin that may wrap the meter.
+test('where the row is short the meter gives up its bar, then the window, then the percent, then itself', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await footer($, [], 56))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 55))).toEqual(['ctx', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 45))).toEqual(['ctx', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 44))).toEqual(['ctx', ' 142k 14%'])
+  expect(await texts(await footer($, [], 42))).toEqual(['ctx', ' 142k 14%'])
+  expect(await texts(await footer($, [], 41))).toEqual(['ctx', ' 142k'])
+  expect(await texts(await footer($, [], 38))).toEqual(['ctx', ' 142k'])
+  expect(await texts(await footer($, [], 37))).toEqual([])
+})
+
+test('the dash gives way too, and last', async ($, on) => {
+  world(on)
+  await startSession($)
+  expect(await texts(await footer($, [], 35))).toEqual(['ctx –'])
+  expect(await texts(await footer($, [], 34))).toEqual([])
+})
+
+test('off the terminal the meter is drawn whole, however narrow the viewport says it is', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  const ui = await $.ui.mount({ plugin: 'context-meter', surface: 'desktop', component: 'SessionMode', props: { modes: [] }, viewport: { columns: 30, rows: 30 } })
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+})
+
 test('a new measurement redraws the footer already on screen', async ($, on) => {
   world(on)
   await startSession($)

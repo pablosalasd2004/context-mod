@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Reading } from '../types'
-import { barRuns, filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
+import { AROUND, barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, roomOf, thresholdsFor } from './meter'
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
 const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, null as number | null)
@@ -12,6 +12,9 @@ const isAlerted = atom({ plugin: 'context-meter', key: 'isAlerted' } as const, f
 
 // While a turn runs the engine's figure moves with each response, but it is only announced when the turn ends.
 const REFRESH_MS = 2000
+
+// Columns of `ctx –`, which the meter shows while it has no figure.
+const DASH = 5
 
 /**
  * Raises the toast the first time the context enters red. It stays quiet while the context stays red or
@@ -146,8 +149,10 @@ export const register: Register = (on, options) => {
     const point = await read($, compactAt)
     const beneath = await next(e)
     const { Box, Text } = $.ui.resolve(e)
+    const room = roomOf(e.surface, e.viewport?.columns) - AROUND
 
     if (current === null || current.tokens === null) {
+      if (room < DASH) return beneath
       return (
         <Box flexDirection="row">
           <Text dimColor>ctx –</Text>
@@ -157,6 +162,10 @@ export const register: Register = (on, options) => {
     }
 
     const percent = Math.round((current.tokens / current.window) * 100)
+    const words = { tokens: formatTokens(current.tokens), window: formatTokens(current.window), percent: `${percent}%` }
+    const detail = detailFor(room, words)
+    if (detail === null) return beneath
+
     const level = levelFor(current.tokens, thresholdsFor(current.window, options))
     const marker = options.showMarker === false ? null : markerCell(point ?? undefined, current.window)
     const runs = barRuns(filledCells(current.tokens, current.window), marker)
@@ -164,11 +173,13 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="row">
         <Text dimColor>ctx</Text>
-        {runs.map((run, i) => {
-          const cells = (i === 0 ? ' ' : '') + (run.isMarker ? '┃' : run.isFilled ? '━' : '─').repeat(run.cells)
-          return run.isFilled ? <Text color={level}>{cells}</Text> : <Text dimColor>{cells}</Text>
-        })}
-        <Text>{` ${formatTokens(current.tokens)}/${formatTokens(current.window)} ${percent}%`}</Text>
+        {detail.hasBar
+          ? runs.map((run, i) => {
+              const cells = (i === 0 ? ' ' : '') + (run.isMarker ? '┃' : run.isFilled ? '━' : '─').repeat(run.cells)
+              return run.isFilled ? <Text color={level}>{cells}</Text> : <Text dimColor>{cells}</Text>
+            })
+          : null}
+        <Text>{` ${words.tokens}${detail.hasWindow ? '/' + words.window : ''}${detail.hasPercent ? ' ' + words.percent : ''}`}</Text>
         {beneath}
       </Box>
     )
