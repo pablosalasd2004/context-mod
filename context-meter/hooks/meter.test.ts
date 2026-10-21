@@ -1,7 +1,7 @@
 // Pure rules of the meter, run with `claude plugin test ./context-meter`.
 import { expect, test } from 'claude-code/testing'
 
-import { barRuns, filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
+import { barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
 
 test('a count under a thousand is shown whole', () => {
   const cases: [number, string][] = [
@@ -130,6 +130,31 @@ test('the auto-compact marker stays inside the bar', () => {
 test('there is no marker when auto-compact is off or the window is unknown', () => {
   expect(markerCell(undefined, 1_000_000)).toBeNull()
   expect(markerCell(967_000, 0)).toBeNull()
+})
+
+test('where the row is short the meter gives up its bar, then the window, then the percent, then itself', () => {
+  // `ctx ━━━━━━━━━━ 142k/1M 14%` is 26 columns; without the bar 15; without the window 12; without the percent 8.
+  const words = { tokens: '142k', window: '1M', percent: '14%' }
+  const full = { hasBar: true, hasWindow: true, hasPercent: true }
+  const cases: [number, object | null][] = [
+    [Infinity, full],
+    [26, full],
+    [25, { hasBar: false, hasWindow: true, hasPercent: true }],
+    [15, { hasBar: false, hasWindow: true, hasPercent: true }],
+    [14, { hasBar: false, hasWindow: false, hasPercent: true }],
+    [12, { hasBar: false, hasWindow: false, hasPercent: true }],
+    [11, { hasBar: false, hasWindow: false, hasPercent: false }],
+    [8, { hasBar: false, hasWindow: false, hasPercent: false }],
+    [7, null]
+  ]
+  for (const [room, detail] of cases) expect(detailFor(room, words), `room ${room}`).toEqual(detail)
+})
+
+test('longer figures take more room', () => {
+  // `ctx ━━━━━━━━━━ 1.3M/2M 100%` is one column wider than the one above: 27.
+  const words = { tokens: '1.3M', window: '2M', percent: '100%' }
+  expect(detailFor(27, words)).toEqual({ hasBar: true, hasWindow: true, hasPercent: true })
+  expect(detailFor(26, words)).toEqual({ hasBar: false, hasWindow: true, hasPercent: true })
 })
 
 test('the bar is split into runs of filled, empty and marker cells', () => {

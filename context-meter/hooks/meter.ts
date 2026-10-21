@@ -65,6 +65,24 @@ export function barRuns (filled: number, marker: number | null): BarRun[] {
   return runs
 }
 
+/** What the meter still draws: the bar, the window beside the tokens, the percent. */
+export type Detail = { hasBar: boolean; hasWindow: boolean; hasPercent: boolean }
+
+/** The most the meter can draw in `room` columns, or null when not even the tokens fit. */
+export function detailFor (room: number, words: { tokens: string; window: string; percent: string }): Detail | null {
+  const label = 'ctx'.length
+  const tokens = 1 + words.tokens.length
+  const window = 1 + words.window.length
+  const percent = 1 + words.percent.length
+  const fit = [
+    { hasBar: true, hasWindow: true, hasPercent: true, width: label + 1 + CELLS + tokens + window + percent },
+    { hasBar: false, hasWindow: true, hasPercent: true, width: label + tokens + window + percent },
+    { hasBar: false, hasWindow: false, hasPercent: true, width: label + tokens + percent },
+    { hasBar: false, hasWindow: false, hasPercent: false, width: label + tokens }
+  ].find(({ width }) => width <= room)
+  return fit === undefined ? null : { hasBar: fit.hasBar, hasWindow: fit.hasWindow, hasPercent: fit.hasPercent }
+}
+
 /** The color for a token count: `claude` is the normal one. */
 export function levelFor (tokens: number, thresholds: Thresholds): Level {
   return tokens >= thresholds.critical ? 'error' : tokens >= thresholds.warn ? 'warning' : 'claude'
