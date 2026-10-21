@@ -174,7 +174,7 @@ test('a text takes a column per character, and a variation selector none', () =>
   expect(widthOf('')).toBe(0)
   expect(widthOf('? for shortcuts')).toBe(15)
   expect(widthOf('⏵⏵ accept edits on')).toBe(18)
-  expect(widthOf('▶︎▶️')).toBe(2)
+  expect(widthOf('▶\uFE0E▶\uFE0F')).toBe(2)
 })
 
 test('longer figures take more room', () => {

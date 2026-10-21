@@ -99,9 +99,12 @@ export function isPluginEnabled (enabledPlugins: unknown, name: string): boolean
   return Object.entries(enabledPlugins).some(([id, isOn]) => isOn === true && id.startsWith(`${name}@`))
 }
 
-/** Columns a text takes on one row. */
+/**
+ * Columns a text takes on one row: one per character, none for a variation selector (U+FE0E, U+FE0F).
+ * Wide characters (CJK, most emoji) are not counted double, which suits the footer's own labels.
+ */
 export function widthOf (text: string): number {
-  return [...text.replace(/[︎️]/g, '')].length
+  return [...text.replace(/[\uFE0E\uFE0F]/g, '')].length
 }
 
 /**
