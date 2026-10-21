@@ -4,9 +4,14 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const NOW = Date.parse('2026-10-21T10:00:00Z')
+/** A compaction always leaves at least one message. */
+const MESSAGES = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
 
-/** What the engine says about the context. Without `autoCompactThreshold` auto-compact is off. */
-type Fake = { tokens?: number; window: number; autoCompactThreshold?: number; isFailing: boolean }
+/**
+ * What the engine says about the context. Without `autoCompactThreshold` auto-compact is off.
+ * `skipCompaction` is the reason a hook beneath gives for not compacting.
+ */
+type Fake = { tokens?: number; window: number; autoCompactThreshold?: number; isFailing: boolean; skipCompaction?: string }
 
 /** Everything beneath the mod: the clock, the session's usage and what the engine draws. */
 function world (on: On, start: Partial<Fake> = {}) {
@@ -18,6 +23,8 @@ function world (on: On, start: Partial<Fake> = {}) {
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('command.run', () => ({}))
   on('config.set', ($, e) => ({ value: e.value }))
+  on('classic.SessionStart', () => ({}))
+  on('session.compact', () => (fake.skipCompaction === undefined ? { messages: MESSAGES } : { skip: fake.skipCompaction }))
   on('session.usage', (_, e) => {
     queries.push(e?.breakdown)
     if (fake.isFailing) return { deny: 'usage is down' }
@@ -144,6 +151,73 @@ test('turning auto-compact off in /config takes the marker away', async ($, on) 
   w.fake.autoCompactThreshold = undefined
   await $.config.set({ key: 'autoCompact', value: false, previous: true, provider: { plugin: 'engine', tier: 'core' }, origin: { kind: 'composer' } })
   expect(await ui.find({ type: 'Text', text: '┃' })).toBeUndefined()
+})
+
+test('after /clear the meter reads the engine again and shows the dash', async ($, on) => {
+  const w = world(on, { tokens: 600_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  const ui = await footer($)
+  w.fake.tokens = undefined
+  await $.classic.SessionStart({ source: 'clear' })
+  expect(await texts(ui)).toEqual(['ctx –'])
+  expect(w.queries).toEqual(['summary', 'summary'])
+})
+
+test('after /resume and a fork the meter shows the figure of the session it came back to', async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  const ui = await footer($)
+  w.fake.tokens = 250_000
+  await $.classic.SessionStart({ source: 'resume' })
+  expect(await texts(ui)).toEqual(['ctx', ' ━━━', '───────', ' 250k/1M 25%'])
+  w.fake.tokens = 400_000
+  await $.classic.SessionStart({ source: 'fork' })
+  expect(await texts(ui)).toEqual(['ctx', ' ━━━━', '──────', ' 400k/1M 40%'])
+})
+
+for (const trigger of ['manual', 'auto', 'plugin'] as const) {
+  test(`a ${trigger} compaction that stands clears the reading and asks for the breakdown again`, async ($, on) => {
+    const w = world(on, { tokens: 700_000, autoCompactThreshold: 967_000 })
+    await startSession($)
+    const ui = await footer($)
+    expect((await texts(ui)).at(-1)).toBe(' 700k/1M 70%')
+    await $.session.compact({ trigger, messages: MESSAGES })
+    expect(await texts(ui)).toEqual(['ctx –'])
+    expect(w.queries.filter(query => query === 'summary').length).toBe(2)
+  })
+}
+
+test('a precompute, a vetoed compaction and a subagent compacting leave the reading alone', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  const ui = await footer($)
+  await $.session.compact({ trigger: 'precompute', messages: MESSAGES })
+  await $.session.compact({ trigger: 'manual', agentId: 'helper', messages: MESSAGES })
+  w.fake.skipCompaction = 'off'
+  await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  expect((await texts(ui)).at(-1)).toBe(' 700k/1M 70%')
+})
+
+test('the SessionStart a compaction raises does not make the meter read the engine again', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  await $.classic.SessionStart({ source: 'compact' })
+  expect(w.queries).toEqual(['summary'])
+})
+
+test('a compaction is not undone by the figure the engine still reports for it', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  const ui = await footer($)
+  await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  // The engine says the same as before until a new response arrives.
+  await $.classic.SessionStart({ source: 'compact' })
+  await measure($, 700_000)
+  expect(await texts(ui)).toEqual(['ctx –'])
+  // The next response reports the real size.
+  w.fake.tokens = 80_000
+  await measure($, 80_000)
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 80k/1M 8%'])
 })
 
 test('a new measurement redraws the footer already on screen', async ($, on) => {

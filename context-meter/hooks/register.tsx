@@ -6,9 +6,18 @@ import { barRuns, filledCells, formatTokens, levelFor, markerCell, thresholdsFor
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
 const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, null as number | null)
+const stale = atom({ plugin: 'context-meter', key: 'stale' } as const, null as number | null)
 
-/** Keeps a context figure from the engine for the footer. */
+/**
+ * Keeps a context figure from the engine for the footer. After a compaction the engine goes on
+ * reporting the figure from before it, so that one is not kept; the first different figure is.
+ */
 async function take ($: EngineInterface, context: { tokens?: number; window: number }) {
+  const old = await read($, stale)
+  if (old !== null) {
+    if (context.tokens === old) return
+    await update($, stale, () => null)
+  }
   await update($, reading, () => ({ tokens: context.tokens ?? null, window: context.window }))
 }
 
@@ -27,11 +36,36 @@ async function seed ($: EngineInterface) {
   }
 }
 
+/** A compaction emptied the context: show no figure until a response reports the new one. */
+async function afterCompaction ($: EngineInterface) {
+  try {
+    const { context } = await $.session.usage()
+    await update($, stale, () => context.tokens ?? null)
+    await update($, reading, current => (current === null ? null : { ...current, tokens: null }))
+  } catch {
+    // the next measurement sets it right
+  }
+  await seed($)
+}
+
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await seed($)
     return next(e)
   })
+
+  // /clear, /resume and a fork reset the state without a new session.start. A compaction also raises this
+  // with source `compact`, while the engine still reports the figure from before it.
+  on('classic.SessionStart', async ($, e, next) => {
+    if (e.source !== 'compact') await seed($)
+    return next(e)
+  })
+
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    if (e.trigger !== 'precompute' && e.agentId === undefined && result.skip === undefined) await afterCompaction($)
+    return result
+  }).catch(($, e, next) => next(e))
 
   on('session.measure', async ($, e, next) => {
     const before = await read($, reading)

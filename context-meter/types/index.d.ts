@@ -10,6 +10,8 @@ declare module 'claude-code' {
       reading: Reading | null
       /** Tokens at which auto-compact runs; null when it is off or not known yet. */
       compactAt: number | null
+      /** The figure the engine keeps reporting after a compaction, until a response reports a new one. */
+      stale: number | null
     }
   }
 }
