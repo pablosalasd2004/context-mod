@@ -4,7 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Reading } from '../types'
 import {
   AROUND, SEPARATOR, SUB_METER_WIDTH, barRuns, detailFor, filledCells, formatTokens, holdsPlugin, isBlank, isPluginEnabled, levelFor, markerCell,
-  roomOf, thresholdsFor, treeWidth, widthOf
+  roomOf, thresholdsFor, toastText, treeWidth, widthOf
 } from './meter'
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
@@ -39,7 +39,7 @@ async function judge ($: EngineInterface, options: PluginOptions, tokens: number
   await update($, isAlerted, () => true)
   if (options.showToast === false) return
   const percent = Math.round((tokens / window) * 100)
-  await $.ui.toast(`Contexto en ${formatTokens(tokens)} (${percent}%): conviene hacer /compact`)
+  await $.ui.toast(toastText(options, tokens, percent))
 }
 
 /**

@@ -32,6 +32,13 @@
       "description": "Show a toast once each time the context enters red.",
       "default": true
     },
+    "toastLanguage": {
+      "type": "string",
+      "title": "Toast language",
+      "description": "Language of the toast: es for Spanish, en for English.",
+      "options": ["es", "en"],
+      "default": "es"
+    },
     "showMarker": {
       "type": "boolean",
       "title": "Auto-compact marker on the bar",

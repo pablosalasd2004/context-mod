@@ -396,6 +396,20 @@ test('the toast can be switched off in the config', { options: { showToast: fals
   expect(w.toasts).toEqual([])
 })
 
+test('the toast is in Spanish unless the config says otherwise', async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 700_000)
+  expect(w.toasts).toEqual(['Contexto en 700k (70%): conviene hacer /compact'])
+})
+
+test('the toast can be in English through the config', { options: { toastLanguage: 'en' } }, async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 700_000)
+  expect(w.toasts).toEqual(['Context at 700k (70%): consider running /compact'])
+})
+
 test('the toast follows the thresholds of the config', { options: { warnTokensK: 100, criticalTokensK: 200 } }, async ($, on) => {
   const w = world(on)
   await startSession($)

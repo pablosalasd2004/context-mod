@@ -36,6 +36,15 @@ export function thresholdsFor (window: number, options: Readonly<Record<string, 
   return { warn: (warn * window) / REFERENCE_WINDOW, critical: (critical * window) / REFERENCE_WINDOW }
 }
 
+/**
+ * The toast that suggests /compact, in the language of the config's `toastLanguage`: English for `en`,
+ * Spanish for anything else, which is the default.
+ */
+export function toastText (options: Readonly<Record<string, unknown>>, tokens: number, percent: number): string {
+  const figure = `${formatTokens(tokens)} (${percent}%)`
+  return options.toastLanguage === 'en' ? `Context at ${figure}: consider running /compact` : `Contexto en ${figure}: conviene hacer /compact`
+}
+
 /** How many cells wide the bar is. */
 export const CELLS = 10
 
