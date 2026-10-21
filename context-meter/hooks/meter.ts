@@ -79,6 +79,12 @@ export const SEPARATOR = ' · '
 // Kept free, when no other plugin is beneath, for one that may wrap the meter and draw after it.
 export const AROUND = 1 + SEPARATOR.length
 
+/** Whether `enabledPlugins` (settings.json's map of `name@marketplace`) has `name` on in some marketplace. */
+export function isPluginEnabled (enabledPlugins: unknown, name: string): boolean {
+  if (typeof enabledPlugins !== 'object' || enabledPlugins === null || Array.isArray(enabledPlugins)) return false
+  return Object.entries(enabledPlugins).some(([id, isOn]) => isOn === true && id.startsWith(`${name}@`))
+}
+
 /** Columns a text takes on one row. */
 export function widthOf (text: string): number {
   return [...text.replace(/[︎️]/g, '')].length

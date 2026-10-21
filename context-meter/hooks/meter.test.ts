@@ -1,7 +1,7 @@
 // Pure rules of the meter, run with `claude plugin test ./context-meter`.
 import { expect, test } from 'claude-code/testing'
 
-import { barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, thresholdsFor, widthOf } from './meter'
+import { barRuns, detailFor, filledCells, formatTokens, isPluginEnabled, levelFor, markerCell, thresholdsFor, widthOf } from './meter'
 
 test('a count under a thousand is shown whole', () => {
   const cases: [number, string][] = [
@@ -148,6 +148,26 @@ test('where the row is short the meter gives up its bar, then the window, then t
     [7, null]
   ]
   for (const [room, detail] of cases) expect(detailFor(room, words), `room ${room}`).toEqual(detail)
+})
+
+test('a plugin is enabled when some marketplace lists it as true', () => {
+  expect(isPluginEnabled({ 'sub-meter@better-claude': true }, 'sub-meter')).toBe(true)
+  expect(isPluginEnabled({ 'other@x': true, 'sub-meter@mine': true }, 'sub-meter')).toBe(true)
+  expect(isPluginEnabled({ 'sub-meter@a': false, 'sub-meter@b': true }, 'sub-meter')).toBe(true)
+})
+
+test('a plugin that is switched off, absent or only named alike is not enabled', () => {
+  expect(isPluginEnabled({ 'sub-meter@better-claude': false }, 'sub-meter')).toBe(false)
+  expect(isPluginEnabled({ 'sub-meter-extra@x': true }, 'sub-meter')).toBe(false)
+  expect(isPluginEnabled({ 'other@sub-meter': true }, 'sub-meter')).toBe(false)
+  expect(isPluginEnabled({ 'sub-meter@x': 'true' }, 'sub-meter')).toBe(false)
+  expect(isPluginEnabled({}, 'sub-meter')).toBe(false)
+})
+
+test('settings that are not a map of plugins enable nothing', () => {
+  for (const settings of [undefined, null, 'sub-meter@x', 7, true, ['sub-meter@x']]) {
+    expect(isPluginEnabled(settings, 'sub-meter'), JSON.stringify(settings)).toBe(false)
+  }
 })
 
 test('a text takes a column per character, and a variation selector none', () => {
