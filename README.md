@@ -7,6 +7,11 @@ usage bar in the prompt footer.
 > **Status: early version.** Needs Claude Code 2.1.306 or later. The plugin lives
 > in `context-meter/`; this repository is also its marketplace.
 
+![context-meter at 14%, 56% and 78% of a 1M window: the bar is orange, then yellow, then red](docs/context-meter.png)
+
+*Rendered with the plugin's own formatting code, at the default thresholds and a
+1M window; not a screenshot of a session. Colors approximate the terminal theme.*
+
 ## What it shows
 
 ```text
