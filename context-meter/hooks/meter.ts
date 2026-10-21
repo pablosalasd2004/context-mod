@@ -77,10 +77,18 @@ export const SEPARATOR = ' · '
 // Kept free, when no other plugin is beneath, for one that may wrap the meter and draw after it.
 export const AROUND = 1 + SEPARATOR.length
 
-/** Columns the footer leaves at its right end: all of them off the terminal or where no width was measured. */
-export function roomOf (surface: string, columns: number | undefined): number {
+/** Columns a text takes on one row. */
+export function widthOf (text: string): number {
+  return [...text.replace(/[︎️]/g, '')].length
+}
+
+/**
+ * Columns the footer leaves at its right end, beside the mode label and the hint after it: all of
+ * them off the terminal or where no width was measured.
+ */
+export function roomOf (surface: string, columns: number | undefined, hintWidth: number): number {
   if (surface !== 'terminal' || columns === undefined) return Infinity
-  return columns - FOOTER_PADDING - FOOTER_GAP - MODE_LABEL
+  return columns - FOOTER_PADDING - FOOTER_GAP - MODE_LABEL - (hintWidth > 0 ? 1 + hintWidth : 0)
 }
 
 /** What the meter still draws: the bar, the window beside the tokens, the percent. */

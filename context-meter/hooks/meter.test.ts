@@ -1,7 +1,7 @@
 // Pure rules of the meter, run with `claude plugin test ./context-meter`.
 import { expect, test } from 'claude-code/testing'
 
-import { barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
+import { barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, thresholdsFor, widthOf } from './meter'
 
 test('a count under a thousand is shown whole', () => {
   const cases: [number, string][] = [
@@ -148,6 +148,13 @@ test('where the row is short the meter gives up its bar, then the window, then t
     [7, null]
   ]
   for (const [room, detail] of cases) expect(detailFor(room, words), `room ${room}`).toEqual(detail)
+})
+
+test('a text takes a column per character, and a variation selector none', () => {
+  expect(widthOf('')).toBe(0)
+  expect(widthOf('? for shortcuts')).toBe(15)
+  expect(widthOf('⏵⏵ accept edits on')).toBe(18)
+  expect(widthOf('▶︎▶️')).toBe(2)
 })
 
 test('longer figures take more room', () => {

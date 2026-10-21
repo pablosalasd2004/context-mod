@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Reading } from '../types'
-import { AROUND, barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, roomOf, thresholdsFor } from './meter'
+import { AROUND, barRuns, detailFor, filledCells, formatTokens, levelFor, markerCell, roomOf, thresholdsFor, widthOf } from './meter'
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
 const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, null as number | null)
@@ -15,6 +15,10 @@ const REFRESH_MS = 2000
 
 // Columns of `ctx –`, which the meter shows while it has no figure.
 const DASH = 5
+
+// The hint line as last drawn on the terminal, in columns. A render hook cannot write the session's
+// state, so this one value is kept here; a reload loses it until the hint is drawn again.
+let hintWidth = 0
 
 /**
  * Raises the toast the first time the context enters red. It stays quiet while the context stays red or
@@ -143,13 +147,22 @@ export const register: Register = (on, options) => {
     return result
   }).catch(($, e, next) => next(e))
 
+  // The hint after the mode label shares the row with the meter, so its width tells how much room is left.
+  on('ui.render', { component: 'PromptHint' }, ($, e, next) => {
+    if (e.surface === 'terminal' && widthOf(e.props.hint) !== hintWidth) {
+      hintWidth = widthOf(e.props.hint)
+      $.ui.invalidate('ui.render')
+    }
+    return next(e)
+  })
+
   // The meter, then what is beneath it (the engine's mode labels, another plugin's switch).
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     const current = await read($, reading)
     const point = await read($, compactAt)
     const beneath = await next(e)
     const { Box, Text } = $.ui.resolve(e)
-    const room = roomOf(e.surface, e.viewport?.columns) - AROUND
+    const room = roomOf(e.surface, e.viewport?.columns, hintWidth) - AROUND
 
     if (current === null || current.tokens === null) {
       if (room < DASH) return beneath

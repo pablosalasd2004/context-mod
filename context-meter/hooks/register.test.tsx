@@ -45,6 +45,7 @@ function world (on: On, start: Partial<Fake> = {}) {
   on('ui.render', ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     draws.count += 1
+    if (e.component === 'PromptHint') return <Text>{e.props.hint}</Text>
     if (e.component !== 'SessionMode') return <Text>engine</Text>
     return e.props.modes.length > 0 ? <Box key="engine" /> : ({ type: 'engine', ref: 0 } as const)
   })
@@ -52,6 +53,8 @@ function world (on: On, start: Partial<Fake> = {}) {
 }
 
 const startSession = ($: Engine) => $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+const hint = ($: Engine, text: string) =>
+  $.ui.mount({ plugin: 'context-meter', surface: 'terminal', component: 'PromptHint', props: { isDraft: false, isWorking: false, hint: text } })
 const footer = ($: Engine, modes: string[] = [], columns?: number) =>
   $.ui.mount({ plugin: 'context-meter', surface: 'terminal', component: 'SessionMode', props: { modes }, viewport: columns === undefined ? undefined : { columns, rows: 30 } })
 const texts = async (ui: { findAll: (query: { type: 'Text' }) => Promise<{ text?: string }[]> }) => (await ui.findAll({ type: 'Text' })).map(text => text.text)
@@ -411,6 +414,31 @@ test('where the row is short the meter gives up its bar, then the window, then t
   expect(await texts(await footer($, [], 41))).toEqual(['ctx', ' 142k'])
   expect(await texts(await footer($, [], 38))).toEqual(['ctx', ' 142k'])
   expect(await texts(await footer($, [], 37))).toEqual([])
+})
+
+test('the hint beside the mode label takes its room from the meter', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  await hint($, '? for shortcuts')
+  expect(await texts(await footer($, [], 72))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 71))).toEqual(['ctx', ' 142k/1M 14%'])
+})
+
+test('a footer already on screen is drawn again when the hint changes its width', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  const ui = await footer($, [], 71)
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  await hint($, '? for shortcuts')
+  expect(await texts(ui)).toEqual(['ctx', ' 142k/1M 14%'])
+  await hint($, '')
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+})
+
+test('the hint is left as the engine draws it', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await hint($, '? for shortcuts'))).toEqual(['? for shortcuts'])
 })
 
 test('the dash gives way too, and last', async ($, on) => {
