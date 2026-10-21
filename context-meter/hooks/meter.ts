@@ -76,6 +76,8 @@ export function barRuns (filled: number, marker: number | null): BarRun[] {
   return runs
 }
 
+// The footer measurements below (and `isBlank`, `widthOf`, `holdsPlugin`, `roomOf`) follow the ones in
+// sub-meter, MIT, Copyright (c) 2026 Miguel Ángel Durán (midudev); the notice is in ../LICENSE.
 // The terminal footer's row: two columns of padding at each end, the permission mode label at the left
 // (20 columns for the longest) and at least two columns between that and what is drawn at the right.
 const FOOTER_PADDING = 4

@@ -168,6 +168,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   // The hint after the mode label shares the row with the meter, so its width tells how much room is left.
+  // Adapted from sub-meter, MIT, Copyright (c) 2026 Miguel Ángel Durán (midudev); the notice is in ../LICENSE.
   on('ui.render', { component: 'PromptHint' }, ($, e, next) => {
     if (e.surface === 'terminal' && widthOf(e.props.hint) !== hintWidth) {
       hintWidth = widthOf(e.props.hint)
