@@ -14,6 +14,8 @@ declare module 'claude-code' {
       stale: number | null
       /** Whether a turn of the main conversation is running: the meter polls the engine only then. */
       isWorking: boolean
+      /** Whether the toast already went off for this stretch in red. */
+      isAlerted: boolean
     }
   }
 }

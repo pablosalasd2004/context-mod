@@ -21,6 +21,12 @@ function world (on: On, start: Partial<Fake> = {}) {
   const queries: (string | undefined)[] = []
   /** How many times the engine was asked to draw the footer. */
   const draws = { count: 0 }
+  /** The text of each toast the mod raised. */
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -42,7 +48,7 @@ function world (on: On, start: Partial<Fake> = {}) {
     if (e.component !== 'SessionMode') return <Text>engine</Text>
     return e.props.modes.length > 0 ? <Box key="engine" /> : ({ type: 'engine', ref: 0 } as const)
   })
-  return { clock, fake, queries, draws }
+  return { clock, fake, queries, draws, toasts }
 }
 
 const startSession = ($: Engine) => $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
@@ -311,6 +317,85 @@ test('a tick that finds the same figure does not draw the footer again', async (
   const drawn = w.draws.count
   await w.clock.advance(6_000)
   expect(w.draws.count).toBe(drawn)
+})
+
+test('a toast suggests /compact the first time the context reaches red', async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 699_999)
+  expect(w.toasts).toEqual([])
+  await measure($, 700_000)
+  expect(w.toasts.length).toBe(1)
+  expect(w.toasts[0]).toContain('700k')
+  expect(w.toasts[0]).toContain('/compact')
+})
+
+test('it does not repeat while the context stays red or between yellow and red', async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  for (const tokens of [700_000, 750_000, 800_000, 600_000, 520_000, 710_000]) await measure($, tokens)
+  expect(w.toasts.length).toBe(1)
+})
+
+test('it is armed again once the context drops below yellow', async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 700_000)
+  await measure($, 499_999)
+  await measure($, 700_000)
+  expect(w.toasts.length).toBe(2)
+})
+
+test('it is armed again after a compaction', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  expect(w.toasts.length).toBe(1)
+  await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  w.fake.tokens = 720_000
+  await measure($, 720_000)
+  expect(w.toasts.length).toBe(2)
+})
+
+test('it is armed again after /clear', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  w.fake.tokens = undefined
+  await $.classic.SessionStart({ source: 'clear' })
+  await measure($, 700_000)
+  expect(w.toasts.length).toBe(2)
+})
+
+test('a session that comes back already red is told once', async ($, on) => {
+  const w = world(on, { tokens: 800_000 })
+  await startSession($)
+  w.fake.tokens = 800_000
+  await $.classic.SessionStart({ source: 'resume' })
+  expect(w.toasts.length).toBe(1)
+})
+
+test('the toast can be switched off in the config', { options: { showToast: false } }, async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 800_000)
+  expect(w.toasts).toEqual([])
+})
+
+test('the toast follows the thresholds of the config', { options: { warnTokensK: 100, criticalTokensK: 200 } }, async ($, on) => {
+  const w = world(on)
+  await startSession($)
+  await measure($, 199_999)
+  expect(w.toasts).toEqual([])
+  await measure($, 200_000)
+  expect(w.toasts.length).toBe(1)
+})
+
+test('on a 200k window the toast comes at the same share of the window', async ($, on) => {
+  const w = world(on, { window: 200_000 })
+  await startSession($)
+  await measure($, 139_999, 200_000)
+  expect(w.toasts).toEqual([])
+  await measure($, 140_000, 200_000)
+  expect(w.toasts.length).toBe(1)
 })
 
 test('a new measurement redraws the footer already on screen', async ($, on) => {
