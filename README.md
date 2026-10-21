@@ -50,7 +50,7 @@ box, then **Plugins**, **Add marketplace** with `pablosalasd2004/context-mod`, t
 
 ## Configure
 
-The options are rows in the `/config` menu.
+Set the options with `/plugin configure context-meter@context-mod` in a session.
 
 | Option | Default | What it does |
 | --- | --- | --- |
