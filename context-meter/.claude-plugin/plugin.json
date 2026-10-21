@@ -1,0 +1,42 @@
+{
+  "name": "context-meter",
+  "version": "0.1.0",
+  "description": "Context-window usage at the bottom right of Claude Code, next to the sub-meter bar: tokens used, a bar, and a color that says when to /compact.",
+  "author": {
+    "name": "Pablo Salas",
+    "url": "https://github.com/pablosalasd2004"
+  },
+  "homepage": "https://github.com/pablosalasd2004/context-mod",
+  "repository": "https://github.com/pablosalasd2004/context-mod",
+  "license": "MIT",
+  "keywords": ["context", "tokens", "compact", "status", "mod"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "warnTokensK": {
+      "type": "number",
+      "title": "Yellow at (thousands of tokens)",
+      "description": "The meter turns yellow once the context holds this many thousand tokens. On a model whose window is not larger, the same share of the window is used instead.",
+      "default": 500,
+      "min": 1
+    },
+    "criticalTokensK": {
+      "type": "number",
+      "title": "Red at (thousands of tokens)",
+      "description": "The meter turns red, and a toast suggests /compact, once the context holds this many thousand tokens. On a model whose window is not larger, the same share of the window is used instead.",
+      "default": 700,
+      "min": 1
+    },
+    "showToast": {
+      "type": "boolean",
+      "title": "Toast when the context turns red",
+      "description": "Show a toast once each time the context enters red.",
+      "default": true
+    },
+    "showMarker": {
+      "type": "boolean",
+      "title": "Auto-compact marker on the bar",
+      "description": "Mark the bar cell where auto-compact will run. Hidden when auto-compact is off.",
+      "default": true
+    }
+  }
+}
