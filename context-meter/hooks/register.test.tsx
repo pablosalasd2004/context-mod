@@ -12,9 +12,14 @@ type Fake = { tokens?: number; window: number; autoCompactThreshold?: number; is
 function world (on: On, start: Partial<Fake> = {}) {
   const clock = mock.clock(on, { now: NOW })
   const fake: Fake = { window: 1_000_000, isFailing: false, ...start }
+  /** How each call to usage() was made: `summary` when it asked for the breakdown. */
+  const queries: (string | undefined)[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.measure', ($, e) => ({ changed: e.changed }))
-  on('session.usage', () => {
+  on('command.run', () => ({}))
+  on('config.set', ($, e) => ({ value: e.value }))
+  on('session.usage', (_, e) => {
+    queries.push(e?.breakdown)
     if (fake.isFailing) return { deny: 'usage is down' }
     const breakdown = { autoCompactThreshold: fake.autoCompactThreshold, isAutoCompactEnabled: fake.autoCompactThreshold !== undefined }
     return { value: { startedAt: NOW, rateLimits: [], context: { window: fake.window, tokens: fake.tokens, breakdown } } as never }
@@ -25,7 +30,7 @@ function world (on: On, start: Partial<Fake> = {}) {
     if (e.component !== 'SessionMode') return <Text>engine</Text>
     return e.props.modes.length > 0 ? <Box key="engine" /> : ({ type: 'engine', ref: 0 } as const)
   })
-  return { clock, fake }
+  return { clock, fake, queries }
 }
 
 const startSession = ($: Engine) => $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
@@ -71,6 +76,74 @@ test('when usage fails the meter shows the dash', async ($, on) => {
   world(on, { isFailing: true })
   await startSession($)
   expect(await (await footer($)).find({ type: 'Text', text: 'ctx –' })).toBeDefined()
+})
+
+test('marks the cell where auto-compact will run, dim while the context is short of it', async ($, on) => {
+  world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  const ui = await footer($)
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '────────', '┃', ' 142k/1M 14%'])
+  expect((await ui.find({ type: 'Text', text: '┃' }))?.props.dimColor).toBe(true)
+})
+
+test('the marker takes the color of the bar once the context is past it', async ($, on) => {
+  world(on, { tokens: 600_000, autoCompactThreshold: 267_000 })
+  await startSession($)
+  const ui = await footer($)
+  expect(await texts(ui)).toEqual(['ctx', ' ━━', '┃', '━━━', '────', ' 600k/1M 60%'])
+  expect((await ui.find({ type: 'Text', text: '┃' }))?.props.color).toBe('warning')
+})
+
+test('the breakdown is asked for at the start, not at each measurement', async ($, on) => {
+  const w = world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  expect(w.queries).toEqual(['summary'])
+  await measure($, 200_000)
+  await measure($, 250_000)
+  await measure($, 300_000)
+  expect(w.queries).toEqual(['summary'])
+})
+
+test('a different window asks for the breakdown again and the marker follows', async ($, on) => {
+  const w = world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  const ui = await footer($)
+  w.fake.window = 200_000
+  w.fake.tokens = 50_000
+  w.fake.autoCompactThreshold = 167_000
+  await measure($, 50_000, 200_000)
+  expect(w.queries).toEqual(['summary', 'summary'])
+  expect(await texts(ui)).toEqual(['ctx', ' ━━━', '────', '┃', '──', ' 50k/200k 25%'])
+})
+
+test('/autocompact moves the marker at once', async ($, on) => {
+  const w = world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  const ui = await footer($)
+  w.fake.autoCompactThreshold = 267_000
+  await $.command.run({ command: 'autocompact', args: '300k', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─', '┃', '───────', ' 142k/1M 14%'])
+})
+
+test('there is no marker while auto-compact is off', async ($, on) => {
+  world(on, { tokens: 142_000 })
+  await startSession($)
+  expect(await texts(await footer($))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+})
+
+test('the marker can be switched off in the config', { options: { showMarker: false } }, async ($, on) => {
+  world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  expect(await texts(await footer($))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+})
+
+test('turning auto-compact off in /config takes the marker away', async ($, on) => {
+  const w = world(on, { tokens: 142_000, autoCompactThreshold: 967_000 })
+  await startSession($)
+  const ui = await footer($)
+  w.fake.autoCompactThreshold = undefined
+  await $.config.set({ key: 'autoCompact', value: false, previous: true, provider: { plugin: 'engine', tier: 'core' }, origin: { kind: 'composer' } })
+  expect(await ui.find({ type: 'Text', text: '┃' })).toBeUndefined()
 })
 
 test('a new measurement redraws the footer already on screen', async ($, on) => {

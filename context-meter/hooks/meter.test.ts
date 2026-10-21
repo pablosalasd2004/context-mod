@@ -1,7 +1,7 @@
 // Pure rules of the meter, run with `claude plugin test ./context-meter`.
 import { expect, test } from 'claude-code/testing'
 
-import { filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
+import { barRuns, filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
 
 test('a count under a thousand is shown whole', () => {
   const cases: [number, string][] = [
@@ -130,4 +130,16 @@ test('the auto-compact marker stays inside the bar', () => {
 test('there is no marker when auto-compact is off or the window is unknown', () => {
   expect(markerCell(undefined, 1_000_000)).toBeNull()
   expect(markerCell(967_000, 0)).toBeNull()
+})
+
+test('the bar is split into runs of filled, empty and marker cells', () => {
+  const fill = (cells: number) => ({ cells, isFilled: true, isMarker: false })
+  const empty = (cells: number) => ({ cells, isFilled: false, isMarker: false })
+  expect(barRuns(0, null)).toEqual([empty(10)])
+  expect(barRuns(10, null)).toEqual([fill(10)])
+  expect(barRuns(4, null)).toEqual([fill(4), empty(6)])
+  expect(barRuns(1, 10)).toEqual([fill(1), empty(8), { cells: 1, isFilled: false, isMarker: true }])
+  expect(barRuns(6, 3)).toEqual([fill(2), { cells: 1, isFilled: true, isMarker: true }, fill(3), empty(4)])
+  expect(barRuns(10, 10)).toEqual([fill(9), { cells: 1, isFilled: true, isMarker: true }])
+  expect(barRuns(0, 1)).toEqual([{ cells: 1, isFilled: false, isMarker: true }, empty(9)])
 })

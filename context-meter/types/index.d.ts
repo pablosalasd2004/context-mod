@@ -6,6 +6,10 @@ export type Reading = { tokens: number | null; window: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'context-meter': { reading: Reading | null }
+    'context-meter': {
+      reading: Reading | null
+      /** Tokens at which auto-compact runs; null when it is off or not known yet. */
+      compactAt: number | null
+    }
   }
 }

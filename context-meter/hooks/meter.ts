@@ -49,6 +49,22 @@ export function markerCell (threshold: number | undefined, window: number): numb
   return Math.min(Math.max(Math.round((threshold / window) * CELLS), 1), CELLS)
 }
 
+/** A stretch of the bar drawn alike: `isMarker` runs are the single cell auto-compact is marked in. */
+export type BarRun = { cells: number; isFilled: boolean; isMarker: boolean }
+
+/** The bar as runs of alike cells, left to right; `marker` is the 1-based cell to mark, or null. */
+export function barRuns (filled: number, marker: number | null): BarRun[] {
+  const runs: BarRun[] = []
+  for (let cell = 1; cell <= CELLS; cell++) {
+    const isFilled = cell <= filled
+    const isMarker = cell === marker
+    const last = runs.at(-1)
+    if (last !== undefined && !isMarker && !last.isMarker && last.isFilled === isFilled) last.cells += 1
+    else runs.push({ cells: 1, isFilled, isMarker })
+  }
+  return runs
+}
+
 /** The color for a token count: `claude` is the normal one. */
 export function levelFor (tokens: number, thresholds: Thresholds): Level {
   return tokens >= thresholds.critical ? 'error' : tokens >= thresholds.warn ? 'warning' : 'claude'
