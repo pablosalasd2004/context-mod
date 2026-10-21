@@ -34,6 +34,21 @@ export function thresholdsFor (window: number, options: Readonly<Record<string, 
   return { warn: (warn * window) / REFERENCE_WINDOW, critical: (critical * window) / REFERENCE_WINDOW }
 }
 
+/** How many cells wide the bar is. */
+export const CELLS = 10
+
+/** How many cells of the bar the context fills. */
+export function filledCells (tokens: number, window: number): number {
+  if (!(window > 0)) return 0
+  return Math.round(Math.min(Math.max(tokens / window, 0), 1) * CELLS)
+}
+
+/** The cell (1 to CELLS) where auto-compact will run, or null with auto-compact off. */
+export function markerCell (threshold: number | undefined, window: number): number | null {
+  if (threshold === undefined || !(window > 0)) return null
+  return Math.min(Math.max(Math.round((threshold / window) * CELLS), 1), CELLS)
+}
+
 /** The color for a token count: `claude` is the normal one. */
 export function levelFor (tokens: number, thresholds: Thresholds): Level {
   return tokens >= thresholds.critical ? 'error' : tokens >= thresholds.warn ? 'warning' : 'claude'

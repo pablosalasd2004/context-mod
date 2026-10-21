@@ -1,7 +1,7 @@
 // Pure rules of the meter, run with `claude plugin test ./context-meter`.
 import { expect, test } from 'claude-code/testing'
 
-import { formatTokens, levelFor, thresholdsFor } from './meter'
+import { filledCells, formatTokens, levelFor, markerCell, thresholdsFor } from './meter'
 
 test('a count under a thousand is shown whole', () => {
   const cases: [number, string][] = [
@@ -91,4 +91,43 @@ test('thresholds below the window are kept as they are', () => {
 test('when the red threshold reaches the window both keep their share of it, in order', () => {
   expect(thresholdsFor(200_000, { warnTokensK: 150, criticalTokensK: 250 })).toEqual({ warn: 30_000, critical: 50_000 })
   expect(thresholdsFor(200_000, { warnTokensK: 100, criticalTokensK: 200 })).toEqual({ warn: 20_000, critical: 40_000 })
+})
+
+test('the bar fills in proportion to the window, ten cells wide', () => {
+  const cases: [number, number, number][] = [
+    [0, 1_000_000, 0],
+    [49_999, 1_000_000, 0],
+    [50_000, 1_000_000, 1],
+    [142_000, 1_000_000, 1],
+    [500_000, 1_000_000, 5],
+    [967_000, 1_000_000, 10],
+    [100_000, 200_000, 5]
+  ]
+  for (const [tokens, window, cells] of cases) expect(filledCells(tokens, window), `${tokens} of ${window}`).toBe(cells)
+})
+
+test('the bar never overflows or goes negative, and an empty window draws nothing', () => {
+  expect(filledCells(1_200_000, 1_000_000)).toBe(10)
+  expect(filledCells(-5, 1_000_000)).toBe(0)
+  expect(filledCells(100, 0)).toBe(0)
+})
+
+test('the auto-compact marker sits in the cell of its share of the window', () => {
+  const cases: [number, number, number][] = [
+    [967_000, 1_000_000, 10],
+    [267_000, 1_000_000, 3],
+    [100_000, 1_000_000, 1],
+    [167_000, 200_000, 8]
+  ]
+  for (const [threshold, window, cell] of cases) expect(markerCell(threshold, window), `${threshold} of ${window}`).toBe(cell)
+})
+
+test('the auto-compact marker stays inside the bar', () => {
+  expect(markerCell(40_000, 1_000_000)).toBe(1)
+  expect(markerCell(1_200_000, 1_000_000)).toBe(10)
+})
+
+test('there is no marker when auto-compact is off or the window is unknown', () => {
+  expect(markerCell(undefined, 1_000_000)).toBeNull()
+  expect(markerCell(967_000, 0)).toBeNull()
 })
