@@ -37,7 +37,7 @@ Layout:
 Product decisions already made:
 
 - Yellow at 500K tokens and red at 700K tokens (absolute, configurable through `userConfig` in thousands of tokens). When a threshold is at or above the model's window (200K models), use the same proportion of the window instead, so the color can still change.
-- A toast when the context first enters red, once per episode; re-arm after it drops below yellow or after a compaction or `/clear`. Toast text is in Spanish.
+- A toast when the context first enters red, once per episode; re-arm after it drops below yellow or after a compaction or `/clear`. Toast text is in Spanish by default, and English through the `toastLanguage` option (`es` or `en`).
 - A marker on the bar at the real auto-compact point (`autoCompactThreshold / window`), hidden when auto-compact is off.
 - `context-meter` is a separate plugin. Do not modify `sub-meter` or its cache; it is overwritten on update.
 

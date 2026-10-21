@@ -22,7 +22,8 @@ ctx ━────────┃ 142k/1M 14%
   is off, and it follows `/autocompact`.
 - A toast suggests `/compact` the first time the context enters red. It is raised
   once per stretch in red, and again after the context drops below yellow, after a
-  compaction, or after `/clear`. The toast text is in Spanish.
+  compaction, or after `/clear`. The toast text is in Spanish by default, and can
+  be switched to English with `toastLanguage`.
 - `ctx –` is shown while there is no figure yet, for example in a new session and
   right after a compaction, until the next response.
 - Where the footer is short, the meter gives up its bar, then the window, then the
@@ -77,6 +78,7 @@ Set the options with `/plugin configure context-meter@context-mod` in a session.
 | `warnTokensK` | 500 | Thousands of tokens at which the bar turns yellow. |
 | `criticalTokensK` | 700 | Thousands of tokens at which the bar turns red and the toast is raised. |
 | `showToast` | on | Raise the toast when the context enters red. |
+| `toastLanguage` | `es` | Language of the toast: `es` (Spanish) or `en` (English). |
 | `showMarker` | on | Mark the auto-compact cell on the bar. |
 
 A value that is not a number of at least 1 takes its default, and a red threshold
