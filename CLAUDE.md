@@ -4,17 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`context-mod` is a marketplace repository for `context-meter`, a Claude Code mod (a plugin made of function hooks) that shows context-window usage in the prompt footer, next to the usage bar of the `sub-meter` plugin. Status: planning. The plugin code does not exist yet.
+`context-mod` is a marketplace repository for `context-meter`, a Claude Code mod (a plugin made of function hooks) that shows context-window usage in the prompt footer, next to the usage bar of the `sub-meter` plugin. Status: the plugin is implemented and verified in a terminal session; the desktop app has not been checked.
 
 ## Commands
 
 Package manager is pnpm. The plugin has no build step and no runtime dependencies: Claude Code loads the `.tsx` files directly.
 
 ```
-claude plugin validate ./context-meter --strict   # manifest + hooks module (unverified: plugin not written yet)
-claude plugin validate .                          # marketplace manifest (unverified)
+claude plugin validate ./context-meter --strict   # manifest + hooks module
+claude plugin validate .                          # marketplace manifest
 claude plugin test ./context-meter                # runs every *.test.ts(x) under the folder; no per-test filter
-pnpm dlx -p typescript tsc -p ./context-meter     # unverified; tsc is not installed globally
+pnpm dlx --package typescript tsc -p ./context-meter   # pnpm 12 rejects `-p typescript`; `--package` is the form that works
 claude --plugin-dir ./context-meter               # dev load, hot-reloads on save (terminal only)
 pnpm dlx skills add obra/superpowers --skill test-driven-development verification-before-completion systematic-debugging --agent claude-code --copy --yes
 ```
@@ -25,11 +25,11 @@ pnpm dlx skills add obra/superpowers --skill test-driven-development verificatio
 
 ## Architecture
 
-Planned layout (nothing below `context-meter/` exists yet):
+Layout:
 
 - `.claude-plugin/marketplace.json` at the repo root lists the plugin with `source: "./context-meter"`.
-- `context-meter/` is the plugin root: `.claude-plugin/plugin.json` (with `types` and `userConfig`), `hooks/hooks.json` pointing to the single module `hooks/register.tsx`, `hooks/register.test.tsx`, `types/index.d.ts` (the `PluginState` contract).
-- Data flow: the `session.measure` event pushes `context: { tokens, window, percent }` into `$.state` atoms. A `ui.render` hook on `SessionMode` draws the `ctx` meter and then `await next(e)`, which holds the engine's mode labels and sub-meter's meter.
+- `context-meter/` is the plugin root: `.claude-plugin/plugin.json` (with `types` and `userConfig`), `hooks/hooks.json` pointing to the single module `hooks/register.tsx`, `hooks/register.test.tsx`, `hooks/meter.ts` (pure rules: formatting, levels, thresholds, bar cells, marker, widths; no `$`, no JSX) with `hooks/meter.test.ts`, `types/index.d.ts` (the `PluginState` contract).
+- Data flow: `session.measure` and the reads at `session.start` and `classic.SessionStart` store the context figure in `$.state` atoms. A timer started in `session.start` polls `$.session.usage()` only while a main turn runs. A `ui.render` hook on `SessionMode` draws the `ctx` meter and then `await next(e)`, which holds the engine's mode labels and whatever is beneath the meter. `sub-meter`'s room is reserved from `enabledPlugins` read via `$.settings.read`.
 - Reference implementation: the installed `sub-meter` plugin (`~/.claude/plugins/cache/better-claude/sub-meter/<version>/hooks/register.tsx` and its `register.test.tsx`). Read it as a model for the footer width logic and the test harness. Treat it as read-only.
 
 ## Conventions and pitfalls
@@ -52,15 +52,16 @@ Mods API:
 
 Context numbers:
 
-- `context.tokens` and `context.percent` are empty on a new session and right after a compaction, until the next response. `window` is always present.
-- `session.measure` fires after each turn, not during one. Whether the figure stays fresh in a long turn is unverified; check it before choosing between a timer and a `tool.call` refresh.
+- `context.tokens` is empty on a new session and after `/clear`, until the next response. `window` is always present.
+- After a compaction the engine keeps reporting the figure from before it (the same `tokens` and `apiUsage`), also inside `classic.SessionStart` with `source: 'compact'`. The meter treats that figure as stale and shows `ctx –` until a different figure arrives. Do not reseed from it.
+- `session.measure` fires after each main turn, not during one. `$.session.usage()` does change during a long turn (checked in a spike, one turn of about 13 s), so the meter polls it every 2 s while a main turn runs, and not at all otherwise.
 - `$.session.usage({ breakdown: 'summary' })` estimates locally and is the only breakdown mode to use; `'full'` calls the token-count API. A `session.compact` with `trigger: 'precompute'` is not a real compaction.
 - The default auto-compact point for 1M-window models is documented at https://code.claude.com/docs/en/model-config.md; read it there instead of hard-coding it.
 
 Footer (`SessionMode`):
 
 - Return a tree that contains `await next(e)` exactly once, or the engine's mode labels disappear. Return `next(e)` when there is nothing to show.
-- Each plugin only measures what is beneath it, so the outer plugin yields width first. The order of `sub-meter` and `context-meter` is not defined by the docs; confirm it in a real session.
+- Each plugin only measures what is beneath it, so the outer plugin yields width first. The docs do not define the order of `sub-meter` and `context-meter`. In the installed session `sub-meter` is drawn on the left and `ctx` on the right, which is the opposite of the order seen in an earlier spike loaded with `--plugin-dir`. So `context-meter` reserves its room for `sub-meter` when `enabledPlugins` lists `sub-meter@…` as true, and yields first on a narrow terminal.
 - If you copy helpers from `sub-meter` (MIT, midudev), keep its copyright notice. Reimplementing them is preferred.
 
 Repository:
