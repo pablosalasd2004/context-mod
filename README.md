@@ -27,6 +27,9 @@ ctx ━────────┃ 142k/1M 14%
   right after a compaction, until the next response.
 - Where the footer is short, the meter gives up its bar, then the window, then the
   percent, and finally hides, so it never pushes the mode labels or other plugins out.
+  With `sub-meter` enabled in your settings, the meter also keeps free the room for
+  the widest `sub-meter` bar, so `ctx` is the one that shrinks first on a narrow
+  terminal, whichever of the two plugins is drawn first.
 
 `context-meter` is a separate plugin and does not modify `sub-meter`.
 
