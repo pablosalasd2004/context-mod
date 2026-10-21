@@ -9,9 +9,18 @@ const MESSAGES = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
 
 /**
  * What the engine says about the context. Without `autoCompactThreshold` auto-compact is off.
- * `skipCompaction` is the reason a hook beneath gives for not compacting.
+ * `skipCompaction` is the reason a hook beneath gives for not compacting. `enabledPlugins` is
+ * the settings' map of plugins; with `isSettingsFailing` the settings cannot be read.
  */
-type Fake = { tokens?: number; window: number; autoCompactThreshold?: number; isFailing: boolean; skipCompaction?: string }
+type Fake = {
+  tokens?: number
+  window: number
+  autoCompactThreshold?: number
+  isFailing: boolean
+  skipCompaction?: string
+  enabledPlugins?: Record<string, boolean>
+  isSettingsFailing?: boolean
+}
 
 /** Everything beneath the mod: the clock, the session's usage and what the engine draws. */
 function world (on: On, start: Partial<Fake> = {}) {
@@ -34,6 +43,10 @@ function world (on: On, start: Partial<Fake> = {}) {
   on('command.run', () => ({}))
   on('config.set', ($, e) => ({ value: e.value }))
   on('classic.SessionStart', () => ({}))
+  on('settings.read', () => {
+    if (fake.isSettingsFailing) throw new Error('settings are unreadable')
+    return { value: { enabledPlugins: fake.enabledPlugins ?? {} } }
+  })
   on('session.compact', () => (fake.skipCompaction === undefined ? { messages: MESSAGES } : { skip: fake.skipCompaction }))
   on('session.usage', (_, e) => {
     queries.push(e?.breakdown)
@@ -527,6 +540,60 @@ test('wrapped by another plugin, the meter still draws and the engine\'s node is
   expect(await texts(ui)).toEqual(['5h 58%', 'ctx', ' ━', '─────────', ' 142k/1M 14%', ' · '])
   expect((await ui.findAll({ type: 'engine' })).length).toBe(1)
   expect((await ui.findAll({})).at(-1)?.type).toBe('engine')
+})
+
+// With sub-meter enabled and nothing beneath, sub-meter may be wrapping the meter and measures it, so the
+// meter leaves it the room for its widest form (29 columns) and a separator: its room is columns minus 58.
+const SUB_METER_ON = { 'sub-meter@better-claude': true }
+
+test('with sub-meter enabled the meter leaves it room, and gives up its parts sooner', async ($, on) => {
+  world(on, { tokens: 142_000, enabledPlugins: SUB_METER_ON })
+  await startSession($)
+  expect(await texts(await footer($, [], 84))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 83))).toEqual(['ctx', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 73))).toEqual(['ctx', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 72))).toEqual(['ctx', ' 142k 14%'])
+  expect(await texts(await footer($, [], 70))).toEqual(['ctx', ' 142k 14%'])
+  expect(await texts(await footer($, [], 69))).toEqual(['ctx', ' 142k'])
+  expect(await texts(await footer($, [], 66))).toEqual(['ctx', ' 142k'])
+  expect(await texts(await footer($, [], 65))).toEqual([])
+})
+
+test('with sub-meter off in the settings, or the settings unreadable, the meter takes the room as before', async ($, on) => {
+  world(on, { tokens: 142_000, enabledPlugins: { 'sub-meter@better-claude': false } })
+  await startSession($)
+  expect(await texts(await footer($, [], 56))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  expect(await texts(await footer($, [], 55))).toEqual(['ctx', ' 142k/1M 14%'])
+})
+
+test('where the settings cannot be read the meter takes the room as before and the session goes on', async ($, on) => {
+  const w = world(on, { tokens: 142_000, isSettingsFailing: true })
+  await startSession($)
+  expect(await texts(await footer($, [], 56))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  await startTurn($)
+  w.fake.tokens = 150_000
+  await w.clock.advance(2_000)
+  expect((await texts(await footer($, [], 56))).at(-1)).toBe(' 150k/1M 15%')
+})
+
+test('a plugin beneath that holds the room itself needs no reserve, whatever the settings say', { plugins: [switchBeneath] }, async ($, on) => {
+  world(on, { tokens: 142_000, enabledPlugins: SUB_METER_ON })
+  await startSession($)
+  expect(await texts(await footer($, [], 68))).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%', ' · ', '⏵ narrator on'])
+  expect(await texts(await footer($, [], 67))).toEqual(['ctx', ' 142k/1M 14%', ' · ', '⏵ narrator on'])
+})
+
+test('the settings are read again after /clear, /resume and a fork', async ($, on) => {
+  const w = world(on, { tokens: 142_000 })
+  await startSession($)
+  const ui = await footer($, [], 83)
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
+  w.fake.enabledPlugins = SUB_METER_ON
+  await $.classic.SessionStart({ source: 'resume' })
+  expect(await texts(ui)).toEqual(['ctx', ' 142k/1M 14%'])
+  w.fake.enabledPlugins = {}
+  await $.classic.SessionStart({ source: 'fork' })
+  expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 142k/1M 14%'])
 })
 
 test('the dash gives way too, and last', async ($, on) => {

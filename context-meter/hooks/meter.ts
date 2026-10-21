@@ -79,6 +79,11 @@ export const SEPARATOR = ' · '
 // Kept free, when no other plugin is beneath, for one that may wrap the meter and draw after it.
 export const AROUND = 1 + SEPARATOR.length
 
+// The most columns sub-meter draws: `week`, its ten-cell bar, ` 100%` and ` ↻ 6d 23h`. When sub-meter is
+// enabled and nothing is beneath the meter, sub-meter may be wrapping it, and it measures the meter and
+// shrinks itself to fit, so the meter keeps this much (and a separator) free for it instead.
+export const SUB_METER_WIDTH = 29
+
 /** Whether `enabledPlugins` (settings.json's map of `name@marketplace`) has `name` on in some marketplace. */
 export function isPluginEnabled (enabledPlugins: unknown, name: string): boolean {
   if (typeof enabledPlugins !== 'object' || enabledPlugins === null || Array.isArray(enabledPlugins)) return false

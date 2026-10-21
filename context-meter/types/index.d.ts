@@ -16,6 +16,8 @@ declare module 'claude-code' {
       isWorking: boolean
       /** Whether the toast already went off for this stretch in red. */
       isAlerted: boolean
+      /** Whether sub-meter is enabled in the settings, and so may share the footer row with the meter. */
+      isSubMeterOn: boolean
     }
   }
 }

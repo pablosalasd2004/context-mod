@@ -3,7 +3,8 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { Reading } from '../types'
 import {
-  AROUND, SEPARATOR, barRuns, detailFor, filledCells, formatTokens, holdsPlugin, isBlank, levelFor, markerCell, roomOf, thresholdsFor, treeWidth, widthOf
+  AROUND, SEPARATOR, SUB_METER_WIDTH, barRuns, detailFor, filledCells, formatTokens, holdsPlugin, isBlank, isPluginEnabled, levelFor, markerCell,
+  roomOf, thresholdsFor, treeWidth, widthOf
 } from './meter'
 
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
@@ -11,6 +12,7 @@ const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, n
 const stale = atom({ plugin: 'context-meter', key: 'stale' } as const, null as number | null)
 const isWorking = atom({ plugin: 'context-meter', key: 'isWorking' } as const, false)
 const isAlerted = atom({ plugin: 'context-meter', key: 'isAlerted' } as const, false)
+const isSubMeterOn = atom({ plugin: 'context-meter', key: 'isSubMeterOn' } as const, false)
 
 // While a turn runs the engine's figure moves with each response, but it is only announced when the turn ends.
 const REFRESH_MS = 2000
@@ -72,6 +74,16 @@ async function seed ($: EngineInterface, options: PluginOptions) {
   }
 }
 
+/** Notes whether sub-meter is enabled; where the settings cannot be read, the meter keeps what it knew. */
+async function noteSubMeter ($: EngineInterface) {
+  try {
+    const enabled = await $.settings.read({ key: 'enabledPlugins' })
+    await update($, isSubMeterOn, () => isPluginEnabled(enabled, 'sub-meter'))
+  } catch {
+    // the footer is shared as before
+  }
+}
+
 /** Asks the engine for the figure again, but only while a turn of the main conversation runs. */
 async function tick ($: EngineInterface, options: PluginOptions) {
   try {
@@ -99,6 +111,7 @@ async function afterCompaction ($: EngineInterface, options: PluginOptions) {
 export const register: Register = (on, options) => {
   // Timers stop when the module reloads, so this is where one starts.
   on('session.start', async ($, e, next) => {
+    await noteSubMeter($)
     await seed($, options)
     $.clock.every(REFRESH_MS, () => {
       void tick($, options)
@@ -119,7 +132,10 @@ export const register: Register = (on, options) => {
   // /clear, /resume and a fork reset the state without a new session.start. A compaction also raises this
   // with source `compact`, while the engine still reports the figure from before it.
   on('classic.SessionStart', async ($, e, next) => {
-    if (e.source !== 'compact') await seed($, options)
+    if (e.source !== 'compact') {
+      await noteSubMeter($)
+      await seed($, options)
+    }
     return next(e)
   })
 
@@ -169,8 +185,10 @@ export const register: Register = (on, options) => {
     const hasModes = e.props.modes.length > 0
     const hasBeneath = hasModes || !isBlank(beneath)
     const below = (hasModes ? widthOf(e.props.modes.join(' & ')) : 0) + treeWidth(beneath)
+    // A plugin beneath is measured here and gives up room itself; with none, one above may wrap the meter.
+    const above = (await read($, isSubMeterOn)) ? SUB_METER_WIDTH + SEPARATOR.length : AROUND
     const room =
-      roomOf(e.surface, e.viewport?.columns, hintWidth) - (hasBeneath ? below + SEPARATOR.length : 0) - (holdsPlugin(beneath) ? 0 : AROUND)
+      roomOf(e.surface, e.viewport?.columns, hintWidth) - (hasBeneath ? below + SEPARATOR.length : 0) - (holdsPlugin(beneath) ? 0 : above)
     const separator = hasBeneath ? <Text dimColor>{SEPARATOR}</Text> : null
 
     if (current === null || current.tokens === null) {
