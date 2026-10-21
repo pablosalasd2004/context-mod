@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Type declarations the engine rewrites on every plugin load
+**/.claude-plugin/types/
+
+# Throwaway spike output (diagnostic logs)
+.spike/
+
+# Third-party dev skills, restored from skills-lock.json (see README)
+.claude/skills/
+
+# Claude Code local state
+.claude/settings.local.json
+
+# Logs, OS and editor files
+*.log
+.DS_Store
+Thumbs.db
