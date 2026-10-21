@@ -7,6 +7,10 @@ import { barRuns, filledCells, formatTokens, levelFor, markerCell, thresholdsFor
 const reading = atom({ plugin: 'context-meter', key: 'reading' } as const, null as Reading | null)
 const compactAt = atom({ plugin: 'context-meter', key: 'compactAt' } as const, null as number | null)
 const stale = atom({ plugin: 'context-meter', key: 'stale' } as const, null as number | null)
+const isWorking = atom({ plugin: 'context-meter', key: 'isWorking' } as const, false)
+
+// While a turn runs the engine's figure moves with each response, but it is only announced when the turn ends.
+const REFRESH_MS = 2000
 
 /**
  * Keeps a context figure from the engine for the footer. After a compaction the engine goes on
@@ -18,7 +22,10 @@ async function take ($: EngineInterface, context: { tokens?: number; window: num
     if (context.tokens === old) return
     await update($, stale, () => null)
   }
-  await update($, reading, () => ({ tokens: context.tokens ?? null, window: context.window }))
+  const tokens = context.tokens ?? null
+  const current = await read($, reading)
+  if (current !== null && current.tokens === tokens && current.window === context.window) return
+  await update($, reading, () => ({ tokens, window: context.window }))
 }
 
 /**
@@ -36,6 +43,17 @@ async function seed ($: EngineInterface) {
   }
 }
 
+/** Asks the engine for the figure again, but only while a turn of the main conversation runs. */
+async function tick ($: EngineInterface) {
+  try {
+    if (!(await read($, isWorking))) return
+    const { context } = await $.session.usage()
+    await take($, context)
+  } catch {
+    // the next tick tries again
+  }
+}
+
 /** A compaction emptied the context: show no figure until a response reports the new one. */
 async function afterCompaction ($: EngineInterface) {
   try {
@@ -49,8 +67,22 @@ async function afterCompaction ($: EngineInterface) {
 }
 
 export const register: Register = (on, options) => {
+  // Timers stop when the module reloads, so this is where one starts.
   on('session.start', async ($, e, next) => {
     await seed($)
+    $.clock.every(REFRESH_MS, () => {
+      void tick($)
+    })
+    return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) await update($, isWorking, () => true)
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) await update($, isWorking, () => false)
     return next(e)
   })
 

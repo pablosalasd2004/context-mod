@@ -19,7 +19,11 @@ function world (on: On, start: Partial<Fake> = {}) {
   const fake: Fake = { window: 1_000_000, isFailing: false, ...start }
   /** How each call to usage() was made: `summary` when it asked for the breakdown. */
   const queries: (string | undefined)[] = []
+  /** How many times the engine was asked to draw the footer. */
+  const draws = { count: 0 }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('command.run', () => ({}))
   on('config.set', ($, e) => ({ value: e.value }))
@@ -34,16 +38,20 @@ function world (on: On, start: Partial<Fake> = {}) {
   // The engine's own node, as core answers it; with mode labels, a Box the tests find.
   on('ui.render', ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
+    draws.count += 1
     if (e.component !== 'SessionMode') return <Text>engine</Text>
     return e.props.modes.length > 0 ? <Box key="engine" /> : ({ type: 'engine', ref: 0 } as const)
   })
-  return { clock, fake, queries }
+  return { clock, fake, queries, draws }
 }
 
 const startSession = ($: Engine) => $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
 const footer = ($: Engine, modes: string[] = [], columns?: number) =>
   $.ui.mount({ plugin: 'context-meter', surface: 'terminal', component: 'SessionMode', props: { modes }, viewport: columns === undefined ? undefined : { columns, rows: 30 } })
 const texts = async (ui: { findAll: (query: { type: 'Text' }) => Promise<{ text?: string }[]> }) => (await ui.findAll({ type: 'Text' })).map(text => text.text)
+const startTurn = ($: Engine, turnId = 't1', agentId?: string) => $.turn.start({ text: 'go', turnId, agentId })
+const endTurn = ($: Engine, turnId = 't1', agentId?: string) =>
+  $.turn.complete({ turnId, agentId, answer: 'done', durationMs: 5_000, isAborted: false, reason: 'answer' })
 /** The engine reports a new figure after a response. */
 const measure = ($: Engine, tokens: number, window = 1_000_000) =>
   $.session.measure({ context: { tokens, window }, rateLimits: [], changed: ['context'] })
@@ -218,6 +226,91 @@ test('a compaction is not undone by the figure the engine still reports for it',
   w.fake.tokens = 80_000
   await measure($, 80_000)
   expect(await texts(ui)).toEqual(['ctx', ' ━', '─────────', ' 80k/1M 8%'])
+})
+
+test('while a turn runs the meter follows the engine every two seconds', async ($, on) => {
+  const w = world(on, { tokens: 100_000 })
+  await startSession($)
+  const ui = await footer($)
+  await startTurn($)
+  w.fake.tokens = 150_000
+  await w.clock.advance(2_000)
+  expect((await texts(ui)).at(-1)).toBe(' 150k/1M 15%')
+  w.fake.tokens = 200_000
+  await w.clock.advance(1_999)
+  expect((await texts(ui)).at(-1)).toBe(' 150k/1M 15%')
+  await w.clock.advance(1)
+  expect((await texts(ui)).at(-1)).toBe(' 200k/1M 20%')
+})
+
+test('with no turn running the meter does not ask the engine', async ($, on) => {
+  const w = world(on, { tokens: 100_000 })
+  await startSession($)
+  const ui = await footer($)
+  w.fake.tokens = 150_000
+  await w.clock.advance(10_000)
+  expect((await texts(ui)).at(-1)).toBe(' 100k/1M 10%')
+  expect(w.queries).toEqual(['summary'])
+})
+
+test('it stops asking when the turn ends', async ($, on) => {
+  const w = world(on, { tokens: 100_000 })
+  await startSession($)
+  const ui = await footer($)
+  await startTurn($)
+  await endTurn($)
+  w.fake.tokens = 150_000
+  await w.clock.advance(10_000)
+  expect((await texts(ui)).at(-1)).toBe(' 100k/1M 10%')
+})
+
+test("a subagent's turns neither start nor stop it", async ($, on) => {
+  const w = world(on, { tokens: 100_000 })
+  await startSession($)
+  const ui = await footer($)
+  await startTurn($, 'sub-1', 'helper')
+  w.fake.tokens = 150_000
+  await w.clock.advance(4_000)
+  expect((await texts(ui)).at(-1)).toBe(' 100k/1M 10%')
+  await startTurn($, 'main-1')
+  await endTurn($, 'sub-1', 'helper')
+  await w.clock.advance(2_000)
+  expect((await texts(ui)).at(-1)).toBe(' 150k/1M 15%')
+})
+
+test('a usage that failed at the start does not stop the refresh later', async ($, on) => {
+  const w = world(on, { isFailing: true })
+  await startSession($)
+  const ui = await footer($)
+  expect(await texts(ui)).toEqual(['ctx –'])
+  await startTurn($)
+  w.fake.isFailing = false
+  w.fake.tokens = 300_000
+  await w.clock.advance(2_000)
+  expect((await texts(ui)).at(-1)).toBe(' 300k/1M 30%')
+})
+
+test('the timer does not bring back the figure a compaction left behind', async ($, on) => {
+  const w = world(on, { tokens: 700_000 })
+  await startSession($)
+  const ui = await footer($)
+  await $.session.compact({ trigger: 'auto', messages: MESSAGES })
+  await startTurn($)
+  await w.clock.advance(2_000)
+  expect(await texts(ui)).toEqual(['ctx –'])
+  w.fake.tokens = 80_000
+  await w.clock.advance(2_000)
+  expect((await texts(ui)).at(-1)).toBe(' 80k/1M 8%')
+})
+
+test('a tick that finds the same figure does not draw the footer again', async ($, on) => {
+  const w = world(on, { tokens: 100_000 })
+  await startSession($)
+  await footer($)
+  await startTurn($)
+  const drawn = w.draws.count
+  await w.clock.advance(6_000)
+  expect(w.draws.count).toBe(drawn)
 })
 
 test('a new measurement redraws the footer already on screen', async ($, on) => {

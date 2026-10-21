@@ -12,6 +12,8 @@ declare module 'claude-code' {
       compactAt: number | null
       /** The figure the engine keeps reporting after a compaction, until a response reports a new one. */
       stale: number | null
+      /** Whether a turn of the main conversation is running: the meter polls the engine only then. */
+      isWorking: boolean
     }
   }
 }
